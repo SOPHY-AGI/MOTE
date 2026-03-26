@@ -60,6 +60,7 @@ To preserve clarity, MOTE v1 does **not** include:
 ```text
 MOTE/
 ├── README.md
+├── AGENTS.md
 ├── requirements.txt
 ├── .gitignore
 ├── config.py
@@ -73,34 +74,32 @@ MOTE/
 
 ## Architecture
 
-```text
-USER
-  -> enters request in CLI
-  -> MOTE appends user message to session
+```mermaid
+flowchart TD
+    A[User enters request in CLI] --> B[Append user message to workspace/session.jsonl]
+    B --> C[Load bounded legal history]
+    C --> D[Build system prompt]
+    D --> E[Send prompt, history, and tool schemas to model]
 
-MOTE LOOP
-  -> loads bounded legal history
-  -> builds system prompt
-  -> sends messages + tool schemas to model
+    E --> F{Did the model request tools?}
 
-MODEL
-  -> returns final text
-  -> or requests tool calls
+    F -- No --> G[Return final assistant response]
+    G --> H[Append assistant response to session]
+    H --> I[Print response to CLI]
 
-TOOLS
-  -> MOTE validates and executes tool requests
-  -> captures output / errors
-  -> truncates oversized results
-  -> appends tool results back into history
-  -> calls model again
-
-PERSISTENCE
-  -> every turn is appended to workspace/session.jsonl
-  -> next run resumes from prior context
-
-OUTPUT
-  -> final assistant response is printed to the CLI
+    F -- Yes --> J[Append assistant tool-call message to session]
+    J --> K[Validate requested tool calls]
+    K --> L[Execute tool: exec, read_file, or write_file]
+    L --> M[Capture output or error]
+    M --> N[Truncate oversized tool output if needed]
+    N --> O[Append tool result to session]
+    O --> P{Max iterations reached?}
+    P -- No --> C
+    P -- Yes --> Q[Return iteration-limit error]
+    Q --> I
 ```
+
+MOTE is organized around a visible recursive loop: receive input, call the model, execute tools when requested, append results, and continue until the model returns a final answer. The workspace session file preserves continuity across turns, while legal history trimming reduces the chance of replaying orphaned tool results.
 
 ## Safety model
 
@@ -141,7 +140,15 @@ Optional environment variables:
 
 ```bash
 export MOTE_WORKSPACE="./workspace"
-export MOTE_MODEL="gpt-4o"
+export MOTE_MODEL="gpt-5-mini"
+```
+
+To target a local OpenAI-compatible backend instead of OpenAI directly:
+
+```bash
+export MOTE_BASE_URL="http://localhost:8000/v1"
+export MOTE_MODEL="your-local-model"
+export OPENAI_API_KEY="no-key"
 ```
 
 ### 4. Run MOTE
@@ -178,6 +185,7 @@ Good future additions might include:
 - optional web search
 - optional reminders
 - one optional remote/chat interface
+- one optional local OpenAI-compatible model backend
 
 But only if the core remains visible.
 
